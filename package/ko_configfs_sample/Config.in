@@ -1,0 +1,8 @@
+config BR2_PACKAGE_KO_CONFIGFS_SAMPLE
+bool "ko_configfs_sample"
+depends on BR2_LINUX_KERNEL
+help
+Test for adding driver in buildroot
+
+comment "ko_configfs_sample driver needs a Linux kernel to be built"
+depends on !BR2_LINUX_KERNEL
