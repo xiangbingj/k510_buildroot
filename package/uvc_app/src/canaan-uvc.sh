@@ -31,13 +31,45 @@ CONFIG="configs/c.1"
 FUNCTION="uvc.0"
 mkdir functions/$FUNCTION
 
+mkdir -p functions/$FUNCTION/streaming/uncompressed/u/480p
+
+echo "333333" > functions/$FUNCTION/streaming/uncompressed/u/480p/dwFrameInterval
+echo "333333" > functions/$FUNCTION/streaming/uncompressed/u/480p/dwDefaultFrameInterval
+echo "147456000" > functions/$FUNCTION/streaming/uncompressed/u/480p/dwMaxBitRate
+echo "614400" > functions/$FUNCTION/streaming/uncompressed/u/480p/dwMaxVideoFrameBufferSize
+echo "147456000" > functions/$FUNCTION/streaming/uncompressed/u/480p/dwMinBitRate
+echo "480" > functions/$FUNCTION/streaming/uncompressed/u/480p/wHeight
+echo "640" > functions/$FUNCTION/streaming/uncompressed/u/480p/wWidth
+
 mkdir -p functions/$FUNCTION/streaming/uncompressed/u/360p
 
-cat <<EOF > functions/$FUNCTION/streaming/uncompressed/u/360p/dwFrameInterval
-666666
-1000000
-10000000
-EOF
+echo "333333" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwFrameInterval
+echo "333333" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwDefaultFrameInterval
+echo "110592000" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwMaxBitRate
+echo "460800" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwMaxVideoFrameBufferSize
+echo "110592000" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwMinBitRate
+echo "360" > functions/$FUNCTION/streaming/uncompressed/u/360p/wHeight
+echo "640" > functions/$FUNCTION/streaming/uncompressed/u/360p/wWidth
+
+mkdir -p functions/$FUNCTION/streaming/uncompressed/u/720p
+
+echo "1000000" > functions/$FUNCTION/streaming/uncompressed/u/720p/dwFrameInterval
+echo "1000000" > functions/$FUNCTION/streaming/uncompressed/u/720p/dwDefaultFrameInterval
+echo "124416000" > functions/$FUNCTION/streaming/uncompressed/u/720p/dwMaxBitRate
+echo "1555200" > functions/$FUNCTION/streaming/uncompressed/u/720p/dwMaxVideoFrameBufferSize
+echo "124416000" > functions/$FUNCTION/streaming/uncompressed/u/720p/dwMinBitRate
+echo "720" > functions/$FUNCTION/streaming/uncompressed/u/720p/wHeight
+echo "1280" > functions/$FUNCTION/streaming/uncompressed/u/720p/wWidth
+
+mkdir -p functions/$FUNCTION/streaming/uncompressed/u/1080p
+
+echo "5000000" > functions/$FUNCTION/streaming/uncompressed/u/1080p/dwFrameInterval
+echo "5000000" > functions/$FUNCTION/streaming/uncompressed/u/1080p/dwDefaultFrameInterval
+echo "66355200" > functions/$FUNCTION/streaming/uncompressed/u/1080p/dwMaxBitRate
+echo "4147200" > functions/$FUNCTION/streaming/uncompressed/u/1080p/dwMaxVideoFrameBufferSize
+echo "66355200" > functions/$FUNCTION/streaming/uncompressed/u/1080p/dwMinBitRate
+echo "1080" > functions/$FUNCTION/streaming/uncompressed/u/1080p/wHeight
+echo "1920" > functions/$FUNCTION/streaming/uncompressed/u/1080p/wWidth
 
 mkdir functions/$FUNCTION/streaming/header/h
 cd functions/$FUNCTION/streaming/header/h

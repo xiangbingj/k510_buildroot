@@ -120,13 +120,23 @@ struct uvc_format_info {
 static const struct uvc_frame_info uvc_frames_yuyv[] = {
     {
         640,
+        480,
+        {333333, 0},
+    },
+    {
+        640,
         360,
-        {666666, 1000000, 10000000, 0},
+        {333333, 0},
     },
     {
         1280,
         720,
-        {50000000, 0},
+        {1000000, 0},
+    },
+    {
+        1920,
+        1080,
+        {10000000, 0},
     },
     {
         0,
@@ -149,6 +159,11 @@ static const struct uvc_frame_info uvc_frames_mjpeg[] = {
         {50000000, 0},
     },
     {
+        1920,
+        1080,
+        {50000000, 0},
+    },
+    {
         0,
         0,
         {
@@ -159,7 +174,7 @@ static const struct uvc_frame_info uvc_frames_mjpeg[] = {
 
 static const struct uvc_format_info uvc_formats[] = {
     {V4L2_PIX_FMT_YUYV, uvc_frames_yuyv},
-    {V4L2_PIX_FMT_MJPEG, uvc_frames_mjpeg},
+    // {V4L2_PIX_FMT_MJPEG, uvc_frames_mjpeg},
 };
 
 /* ---------------------------------------------------------------------------
