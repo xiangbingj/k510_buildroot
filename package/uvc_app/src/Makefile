@@ -8,13 +8,36 @@ AR	:= $(CROSS_COMPILE)ar
 AS	:= $(CROSS_COMPILE)as
 LD	:= $(CROSS_COMPILE)ld
 
-OBJ ?= uvc_app
+C_SRC = $(wildcard *.c)
+C_SRC += $(wildcard common/*.c)
+C_OBJ = $(patsubst %.c, %.o, $(C_SRC))
+CPP_SRC = $(wildcard *.cpp)
+CPP_OBJ = $(patsubst %cpp, %o, $(CPP_SRC))
 
-$(OBJ): uvc_app.c
-	$(C++) $(CFLAGS) $^ -L ./ -Wl,-Bdynamic -g -o $@
-	
+CFLAGS = $(CFLAG)
+LDFLAGS = $(LDFLAG)
+$(info "======="$(LDFLAGS) )
+TARGET = uvc_app
+
+all: $(TARGET)
+
+$(TARGET): $(CPP_OBJ) $(C_OBJ)
+	$(C++) $^ -o $@ $(LDFLAGS)
+
+%.o:%.cpp
+	$(CC) -c $< -o $@ $(CFLAGS)
+%.o:%.c
+	$(C++) -c $< -o $@ $(CFLAGS)
+
 clean:
-	rm -f *.o
-	rm -f *.d
-	rm -f $(OBJ)
+	@rm -f $(C_OBJ) $(CPP_OBJ)
+	@echo "Clean object files done."
+
+	@rm -f *~
+	@echo "Clean tempreator files done."
+
+	@rm -f $(TARGET)
+	@echo "Clean target files done."
+
+	@echo "Clean done."
 

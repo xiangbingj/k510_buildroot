@@ -36,8 +36,9 @@
 #include <linux/usb/video.h>
 #include <linux/videodev2.h>
 
+#include <signal.h>
 #include "uvc.h"
-
+#include "media_ctl.h"
 /* Enable debug prints. */
 #undef ENABLE_BUFFER_DEBUG
 #undef ENABLE_USB_REQUEST_DEBUG
@@ -117,63 +118,21 @@ struct uvc_format_info {
     const struct uvc_frame_info *frames;
 };
 
-static const struct uvc_frame_info uvc_frames_yuyv[] = {
-    {
-        640,
-        480,
-        {333333, 0},
-    },
-    {
-        640,
-        360,
-        {333333, 0},
-    },
-    {
-        1280,
-        720,
-        {1000000, 0},
-    },
-    {
-        1920,
-        1080,
-        {10000000, 0},
-    },
-    {
-        0,
-        0,
-        {
-            0,
-        },
-    },
+static const struct uvc_frame_info uvc_frames_nv16[] = {
+    { 1080, 720, {1000000, 0}, },
+    { 0, 0, { 0, }, },
 };
 
-static const struct uvc_frame_info uvc_frames_mjpeg[] = {
-    {
-        640,
-        360,
-        {333333, 5000000, 10000000, 0},
-    },
-    {
-        1280,
-        720,
-        {50000000, 0},
-    },
-    {
-        1920,
-        1080,
-        {50000000, 0},
-    },
-    {
-        0,
-        0,
-        {
-            0,
-        },
-    },
+static const struct uvc_frame_info uvc_frames_yuyv[] = {
+    { 640, 480, {333333, 0}, },
+    { 640, 360, {10000000, 0}, },
+    { 1280, 720, {1000000, 0}, },
+    { 1920, 1080, {10000000, 0}, },
+    { 0, 0, {0, }, },
 };
 
 static const struct uvc_format_info uvc_formats[] = {
-    {V4L2_PIX_FMT_YUYV, uvc_frames_yuyv},
+    {V4L2_PIX_FMT_NV16, uvc_frames_nv16},
     // {V4L2_PIX_FMT_MJPEG, uvc_frames_mjpeg},
 };
 
@@ -249,6 +208,14 @@ struct uvc_device {
     struct v4l2_device *vdev;
 };
 
+static bool done = false;
+static void sigint_handler(int signal __attribute__((__unused__)))
+{
+	/* Set the done flag to true when the user presses CTRL-C to interrupt
+	 * the main loop.
+	 */
+	done = true;
+}
 /* forward declarations */
 static int uvc_video_stream(struct uvc_device *dev, int enable);
 
@@ -2075,22 +2042,25 @@ int main(int argc, char *argv[])
     char *uvc_devname = "/dev/video10";
     char *v4l2_devname = "/dev/video1";
     char *mjpeg_image = NULL;
+    static char *video_cfg_file = "uvc_1920x1080.conf";
 
     fd_set fdsv, fdsu;
     int ret, opt, nfds;
     int bulk_mode = 0;
     int dummy_data_gen_mode = 1;
     /* Frame format/resolution related params. */
-    int default_format = 0;     /* V4L2_PIX_FMT_YUYV */
+    int default_format = 0; 
     int default_resolution = 0; /* VGA 360p */
-    int nbufs = 2;              /* Ping-Pong buffers */
+    int nbufs = 3;              /* Ping-Pong buffers */
     /* USB speed related params */
     int mult = 0;
     int burst = 0;
     enum usb_device_speed speed = USB_SPEED_HIGH; /* High-Speed */
     enum io_method uvc_io_method = IO_METHOD_USERPTR;
 
-    while ((opt = getopt(argc, argv, "bdf:hi:m:n:o:r:s:t:u:v:")) != -1) {
+    struct video_info dev_info[2];
+
+    while ((opt = getopt(argc, argv, "bdf:hi:m:n:o:r:s:t:u:v:c:")) != -1) {
         switch (opt) {
         case 'b':
             bulk_mode = 1;
@@ -2182,7 +2152,9 @@ int main(int argc, char *argv[])
         case 'v':
             v4l2_devname = optarg;
             break;
-
+        case 'c':
+            video_cfg_file = optarg;
+            break;
         default:
             printf("Invalid option '-%c'\n", opt);
             usage(argv[0]);
@@ -2190,20 +2162,23 @@ int main(int argc, char *argv[])
         }
     }
 
+    signal(SIGINT, sigint_handler);
+
     if (!dummy_data_gen_mode && !mjpeg_image) {
+        mediactl_init(video_cfg_file, &dev_info[0]);
         /*
          * Try to set the default format at the V4L2 video capture
          * device as requested by the user.
          */
         CLEAR(fmt);
         fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        fmt.fmt.pix.width = (default_resolution == 0) ? 640 : 1280;
-        fmt.fmt.pix.height = (default_resolution == 0) ? 360 : 720;
-        fmt.fmt.pix.sizeimage = (default_format == 0) ? (fmt.fmt.pix.width * fmt.fmt.pix.height * 2)
-                                                      : (fmt.fmt.pix.width * fmt.fmt.pix.height * 1.5);
-        fmt.fmt.pix.pixelformat = (default_format == 0) ? V4L2_PIX_FMT_YUYV : V4L2_PIX_FMT_MJPEG;
+        fmt.fmt.pix.width = dev_info[0].video_width[1];
+        fmt.fmt.pix.height = dev_info[0].video_height[1];
+        fmt.fmt.pix.sizeimage = fmt.fmt.pix.width * fmt.fmt.pix.height * 2;
+        fmt.fmt.pix.pixelformat = dev_info[0].video_out_format[1] ? V4L2_PIX_FMT_NV12 : V4L2_PIX_FMT_NV16;
         fmt.fmt.pix.field = V4L2_FIELD_ANY;
 
+        v4l2_devname = dev_info[0].video_name[1];
         /* Open the V4L2 device. */
         ret = v4l2_open(&vdev, v4l2_devname, &fmt);
         if (vdev == NULL || ret < 0)
@@ -2228,7 +2203,7 @@ int main(int argc, char *argv[])
     udev->width = (default_resolution == 0) ? 640 : 1280;
     udev->height = (default_resolution == 0) ? 360 : 720;
     udev->imgsize = (default_format == 0) ? (udev->width * udev->height * 2) : (udev->width * udev->height * 1.5);
-    udev->fcc = (default_format == 0) ? V4L2_PIX_FMT_YUYV : V4L2_PIX_FMT_MJPEG;
+    udev->fcc = V4L2_PIX_FMT_NV16;
     udev->io = uvc_io_method;
     udev->bulk = bulk_mode;
     udev->nbufs = nbufs;
@@ -2301,7 +2276,7 @@ int main(int argc, char *argv[])
     /* Init UVC events. */
     uvc_events_init(udev);
 
-    while (1) {
+    while (!done) {
         if (!dummy_data_gen_mode && !mjpeg_image)
             FD_ZERO(&fdsv);
 
@@ -2367,8 +2342,12 @@ int main(int argc, char *argv[])
     }
 
     if (!dummy_data_gen_mode && !mjpeg_image)
+    {
         v4l2_close(vdev);
+        mediactl_exit();
+    }
 
     uvc_close(udev);
+
     return 0;
 }

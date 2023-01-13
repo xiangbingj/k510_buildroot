@@ -43,11 +43,11 @@ echo "640" > functions/$FUNCTION/streaming/uncompressed/u/480p/wWidth
 
 mkdir -p functions/$FUNCTION/streaming/uncompressed/u/360p
 
-echo "333333" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwFrameInterval
-echo "333333" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwDefaultFrameInterval
-echo "110592000" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwMaxBitRate
+echo "10000000" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwFrameInterval
+echo "10000000" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwDefaultFrameInterval
+echo "3686400" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwMaxBitRate
 echo "460800" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwMaxVideoFrameBufferSize
-echo "110592000" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwMinBitRate
+echo "3686400" > functions/$FUNCTION/streaming/uncompressed/u/360p/dwMinBitRate
 echo "360" > functions/$FUNCTION/streaming/uncompressed/u/360p/wHeight
 echo "640" > functions/$FUNCTION/streaming/uncompressed/u/360p/wWidth
 
