@@ -38,11 +38,28 @@
 
 #include "uvc.h"
 
+#include "common/k510_drm.h"
+#include "common/media_ctl.h"
+#include <linux/videodev2.h>
+
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/core/utils/logger.hpp>
+
+#include <rapidjson/document.h>
+#include <rapidjson/pointer.h>
+#include <rapidjson/filereadstream.h>
+#include <rapidjson/filewritestream.h>
+#include <rapidjson/writer.h>
+using namespace rapidjson;
+
 /* Enable debug prints. */
 #undef ENABLE_BUFFER_DEBUG
 #undef ENABLE_USB_REQUEST_DEBUG
-#define ENABLE_BUFFER_DEBUG
-#define ENABLE_USB_REQUEST_DEBUG
+// #define ENABLE_BUFFER_DEBUG
+// #define ENABLE_USB_REQUEST_DEBUG
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
@@ -117,11 +134,17 @@ struct uvc_format_info {
     const struct uvc_frame_info *frames;
 };
 
+struct video_info dev_info[2];
+static char *video_cfg_file = "uvc_1920x1080.conf";
+#define SELECT_TIMEOUT		2000
+#define AUTO_ADAPT_CONFIG_FILE "auto.conf"
+static uint32_t screen_width, screen_height;
+
 static const struct uvc_frame_info uvc_frames_nv12[] = {
-    { 640, 480, {10000000, 0}, },
-    { 640, 360, {10000000, 0}, },
-    { 1080, 720, {10000000, 0}, },
-    { 1920, 1080, {10000000, 0}, },
+    // { 640, 480, {10000000, 0}, },
+    // { 640, 360, {10000000, 0}, },
+    { 1088, 720, {2000000, 0}, },
+    // { 1920, 1080, {10000000, 0}, },
     { 0, 0, {0, }, },
 };
 
@@ -479,6 +502,14 @@ static int v4l2_process_data(struct v4l2_device *dev)
         ubuf.bytesused = vbuf.bytesused;
         break;
     }
+
+    // cv::Mat rgb24 = cv::Mat(720, 1088, CV_8UC3);
+    // cv::Mat yuvnv12 = cv::Mat(720 * 3/2, 1088, CV_8UC1, dev->mem[vbuf.index].start);
+    // cv::cvtColor(yuvnv12, rgb24, cv::COLOR_YUV2BGR_NV12);
+    // if(dev->udev->qbuf_count % 10 == 1){
+    // 	std::string img_out_path = "./img_" + std::to_string(dev->udev->qbuf_count) + ".bmp";
+    // 	cv::imwrite(img_out_path, rgb24);
+    // }
 
     ret = ioctl(dev->udev->uvc_fd, VIDIOC_QBUF, &ubuf);
     if (ret < 0) {
@@ -2064,6 +2095,117 @@ static void usage(const char *argv0)
     fprintf(stderr, " -v device	V4L2 Video Capture device\n");
 }
 
+int video_resolution_adaptation(void)
+{
+    // open input file
+    FILE *fp = fopen(video_cfg_file, "rb");
+    if (fp == NULL) {
+        printf("open %s file error\n", video_cfg_file);
+        return -1;
+    }
+    // parse
+    char buff[4096];
+    FileReadStream frs(fp, buff, sizeof(buff));
+    Document root;
+    root.ParseStream(frs);
+    fclose(fp);
+    if (root.HasParseError()) {
+        printf("parse file error\n");
+        return -1;
+    }
+    // default disable all
+    Pointer("/sensor0/~1dev~1video2/video2_used").Set(root, 0);
+    Pointer("/sensor0/~1dev~1video3/video3_used").Set(root, 1);
+    Pointer("/sensor0/~1dev~1video4/video4_used").Set(root, 0);
+    Pointer("/sensor0/~1dev~1video5/video5_used").Set(root, 0);
+    Pointer("/sensor1/~1dev~1video6/video6_used").Set(root, 0);
+    Pointer("/sensor1/~1dev~1video7/video7_used").Set(root, 0);
+    Pointer("/sensor1/~1dev~1video8/video8_used").Set(root, 0);
+    Pointer("/sensor1/~1dev~1video9/video9_used").Set(root, 0);
+
+    char *sensor0_cfg_file = NULL;
+    uint32_t sensor0_total_width;
+    uint32_t sensor0_total_height;
+    uint32_t sensor0_active_width;
+    uint32_t sensor0_active_height;
+    uint32_t video3_width;
+    uint32_t video3_height;
+    uint32_t video5_width;
+    uint32_t video5_height;
+
+#define SENSOR_1920x1080_TIMING(x) \
+    do {\
+        sensor0_total_width = 3476;\
+        sensor0_total_height = 1166;\
+        sensor0_active_width = 1920;\
+        sensor0_active_height = 1080;\
+    } while(0)
+
+#define SENSOR_1080x1920_TIMING(x) \
+    do {\
+        sensor0_total_width = 3453;\
+        sensor0_total_height = 1979;\
+        sensor0_active_width = 1080;\
+        sensor0_active_height = 1920;\
+    } while(0)
+
+    if (screen_width == 1920 && screen_height == 1080) {
+        sensor0_cfg_file = "imx219_0.conf";
+        video3_width = screen_width;
+        video3_height = screen_height;
+        video5_width = 320;
+        video5_height = 192;
+    } else if (screen_width == 1080 && screen_height == 1920) {
+        sensor0_cfg_file = "imx219_1080x1920_0.conf";
+        video3_width = screen_width;
+        video3_height = screen_height;
+        video5_width = 192;
+        video5_height = 320;
+    } else if (screen_width == 1080 && screen_height == 720) {
+        sensor0_cfg_file = "imx219_0.conf";
+        video3_width = screen_width;
+        video3_height = screen_height;
+        video5_width = 320;
+        video5_height = 192;
+    } else {
+        printf("=======%d %d \n", screen_width, screen_height);
+        return -1;
+    }
+    // update video config
+
+    if (strcmp(sensor0_cfg_file, "imx219_0.conf") == 0)
+        SENSOR_1920x1080_TIMING(0);
+    else if (strcmp(sensor0_cfg_file, "imx219_1080x1920_0.conf") == 0)
+        SENSOR_1080x1920_TIMING(0);
+    else
+        return -1;
+    Pointer("/sensor0/sensor0_total_size/sensor0_total_width").Set(root, sensor0_total_width);
+    Pointer("/sensor0/sensor0_total_size/sensor0_total_height").Set(root, sensor0_total_height);
+    Pointer("/sensor0/sensor0_active_size/sensor0_active_width").Set(root, sensor0_active_width);
+    Pointer("/sensor0/sensor0_active_size/sensor0_active_height").Set(root, sensor0_active_height);
+    Pointer("/sensor0/~1dev~1video2/video2_width").Set(root, sensor0_active_width);
+    Pointer("/sensor0/~1dev~1video2/video2_height").Set(root, sensor0_active_height);
+    Pointer("/sensor0/~1dev~1video2/video2_out_format").Set(root, 1);
+    Pointer("/sensor0/~1dev~1video3/video3_width").Set(root, video3_width);
+    Pointer("/sensor0/~1dev~1video3/video3_height").Set(root, video3_height);
+    Pointer("/sensor0/~1dev~1video3/video3_out_format").Set(root, 1);
+
+    // create output file
+    video_cfg_file = AUTO_ADAPT_CONFIG_FILE;
+    fp = fopen(video_cfg_file, "wb");
+    if (fp == NULL) {
+        printf("open %s file error\n", video_cfg_file);
+        return -1;
+    }
+    // generate
+    FileWriteStream fws(fp, buff, sizeof(buff));
+    Writer<FileWriteStream> writer(fws);
+    root.Accept(writer);
+    fclose(fp);
+
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     struct uvc_device *udev;
@@ -2071,13 +2213,13 @@ int main(int argc, char *argv[])
     struct timeval tv;
     struct v4l2_format fmt;
     char *uvc_devname = "/dev/video10";
-    char *v4l2_devname = "/dev/video1";
+    char *v4l2_devname = "/dev/video3";
     char *mjpeg_image = NULL;
 
     fd_set fdsv, fdsu;
     int ret, opt, nfds;
     int bulk_mode = 0;
-    int dummy_data_gen_mode = 1;
+    int dummy_data_gen_mode = 0;
     /* Frame format/resolution related params. */
     int default_format = 0;     /* V4L2_PIX_FMT_YUYV */
     int default_resolution = 0; /* VGA 360p */
@@ -2088,6 +2230,19 @@ int main(int argc, char *argv[])
     enum usb_device_speed speed = USB_SPEED_HIGH; /* High-Speed */
     enum io_method uvc_io_method = IO_METHOD_USERPTR;
 
+    if (drm_get_resolution(NULL, &screen_width, &screen_height) < 0) {
+        printf("get resolution error!\n");
+        return -1;
+    }
+    printf("screen resolution: %dx%d\n", screen_width, screen_height);
+    if (video_resolution_adaptation() < 0) {
+        printf("resolution not support!\n");
+        return -1;
+    }
+    if(mediactl_init(video_cfg_file, &dev_info[0]))
+        return -1;
+    
+    
     while ((opt = getopt(argc, argv, "bdf:hi:m:n:o:r:s:t:u:v:")) != -1) {
         switch (opt) {
         case 'b':
@@ -2187,7 +2342,7 @@ int main(int argc, char *argv[])
             return 1;
         }
     }
-
+    v4l2_devname = dev_info[0].video_name[1];
     if (!dummy_data_gen_mode && !mjpeg_image) {
         /*
          * Try to set the default format at the V4L2 video capture
@@ -2195,11 +2350,10 @@ int main(int argc, char *argv[])
          */
         CLEAR(fmt);
         fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        fmt.fmt.pix.width = (default_resolution == 0) ? 640 : 1280;
-        fmt.fmt.pix.height = (default_resolution == 0) ? 360 : 720;
-        fmt.fmt.pix.sizeimage = (default_format == 0) ? (fmt.fmt.pix.width * fmt.fmt.pix.height * 2)
-                                                      : (fmt.fmt.pix.width * fmt.fmt.pix.height * 1.5);
-        fmt.fmt.pix.pixelformat = (default_format == 0) ? V4L2_PIX_FMT_NV12 : V4L2_PIX_FMT_MJPEG;
+        fmt.fmt.pix.width = 1088;//dev_info[0].video_width[1];
+        fmt.fmt.pix.height = 720;//dev_info[0].video_height[1];
+        // fmt.fmt.pix.sizeimage = fmt.fmt.pix.width * fmt.fmt.pix.height * 1.5;
+        fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_NV12;
         fmt.fmt.pix.field = V4L2_FIELD_ANY;
 
         /* Open the V4L2 device. */
@@ -2223,10 +2377,10 @@ int main(int argc, char *argv[])
     }
 
     /* Set parameters as passed by user. */
-    udev->width = (default_resolution == 0) ? 640 : 1280;
-    udev->height = (default_resolution == 0) ? 360 : 720;
-    udev->imgsize = (default_format == 0) ? (udev->width * udev->height * 2) : (udev->width * udev->height * 1.5);
-    udev->fcc = (default_format == 0) ? V4L2_PIX_FMT_NV12 : V4L2_PIX_FMT_MJPEG;
+    udev->width = 1088;
+    udev->height = 720;
+    udev->imgsize = udev->width * udev->height * 1.5;
+    udev->fcc = V4L2_PIX_FMT_NV12;
     udev->io = uvc_io_method;
     udev->bulk = bulk_mode;
     udev->nbufs = nbufs;
@@ -2365,7 +2519,11 @@ int main(int argc, char *argv[])
     }
 
     if (!dummy_data_gen_mode && !mjpeg_image)
+    {
         v4l2_close(vdev);
+        mediactl_exit(); 
+    }
+        
 
     uvc_close(udev);
     return 0;
